@@ -171,6 +171,19 @@ namespace Kmd.Logic.CitizenDocuments.Client
         public async Task<string> UploadDocumentAzureStorage(IFormFile document, string name, int size = 8000000)
         {
             var documentId = Guid.NewGuid();
+            if (!string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(name)))
+            {
+                return Path.GetFileNameWithoutExtension(document.FileName).Trim() + "_" + documentId + Path.GetExtension(document.FileName);
+            }
+
+            var documentName = name ?? Path.GetFileNameWithoutExtension(document.FileName);
+
+            if (!string.IsNullOrEmpty(Path.GetExtension(name)) && !string.IsNullOrEmpty(Path.GetExtension(document.FileName)))
+            {
+                var fileName = Path.GetFileNameWithoutExtension(name).Trim() + "_" + documentId + Path.GetExtension(document.FileName);
+                return fileName;
+            }
+            return documentName.Trim() + "_" + documentId + ".pdf";
             CloudBlockBlob blob = _container.GetBlockBlobReference(name);
 
             // local variable to track the current number of bytes read into buffer
