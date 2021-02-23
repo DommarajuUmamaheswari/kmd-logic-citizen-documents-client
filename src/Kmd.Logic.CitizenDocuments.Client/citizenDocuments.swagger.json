@@ -1,7 +1,7 @@
 ﻿{
   "swagger": "2.0",
   "info": {
-    "version": "1.1.1",
+    "version": "1.1.2",
     "title": "KMD Logic Citizen Documents Service API"
   },
   "paths": {
@@ -12,7 +12,6 @@
         ],
         "summary": "Gets the citizen document by id.",
         "operationId": "GetDocument",
-        "consumes": [],
         "produces": [
           "application/json",
           "text/json"
@@ -67,7 +66,6 @@
         ],
         "summary": "Loads the data for Citizen Document File Access Page.",
         "operationId": "GetFileAccessPageData",
-        "consumes": [],
         "produces": [
           "application/json",
           "text/json"
@@ -129,44 +127,38 @@
           {
             "name": "configurationId",
             "in": "formData",
-            "required": false,
             "type": "string",
             "format": "uuid"
           },
           {
             "name": "cpr",
             "in": "formData",
-            "required": false,
             "type": "string"
           },
           {
             "name": "retentionPeriodInDays",
             "in": "formData",
-            "required": false,
             "type": "integer",
             "format": "int32"
           },
           {
             "name": "documentType",
             "in": "formData",
-            "required": false,
             "type": "string",
             "enum": [
-              "citizenDocument",
-              "digitalPostCoverLetter",
-              "snailMailCoverLetter"
+              "CitizenDocument",
+              "DigitalPostCoverLetter",
+              "SnailMailCoverLetter"
             ]
           },
           {
             "name": "document",
             "in": "formData",
-            "required": false,
             "type": "file"
           },
           {
             "name": "documentName",
             "in": "formData",
-            "required": false,
             "type": "string"
           }
         ],
@@ -182,7 +174,6 @@
             "schema": {
               "type": "object",
               "additionalProperties": {
-                "uniqueItems": false,
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -252,7 +243,6 @@
             "schema": {
               "type": "object",
               "additionalProperties": {
-                "uniqueItems": false,
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -287,7 +277,6 @@
         ],
         "summary": "Loads the provider config.",
         "operationId": "LoadProviderConfiguration",
-        "consumes": [],
         "produces": [
           "application/json",
           "text/json"
@@ -353,7 +342,7 @@
             "format": "uuid"
           },
           {
-            "name": "sendCitizenDocumentRequest",
+            "name": "request",
             "in": "body",
             "description": "",
             "required": true,
@@ -439,7 +428,6 @@
             "schema": {
               "type": "object",
               "additionalProperties": {
-                "uniqueItems": false,
                 "type": "array",
                 "items": {
                   "type": "string"
@@ -454,7 +442,7 @@
             }
           },
           "404": {
-            "description": "The config does not exists",
+            "description": "The config does not exist",
             "schema": {
               "type": "string"
             }
@@ -464,6 +452,56 @@
             "schema": {
               "type": "string"
             }
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/subscriptions/{subscriptionId}/citizen-documents/storage-access": {
+      "get": {
+        "tags": [
+          "CitizenDocumentProcess"
+        ],
+        "summary": "Gets link to storage with access to upload document.",
+        "operationId": "StorageAccess",
+        "produces": [
+          "application/json",
+          "text/json"
+        ],
+        "parameters": [
+          {
+            "name": "subscriptionId",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "format": "uuid"
+          },
+          {
+            "name": "documentName",
+            "in": "query",
+            "description": "",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SAS Uri has returned successfully",
+            "schema": {
+              "format": "uri",
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "401": {
+            "description": "The request is not authorized"
           }
         },
         "security": [
@@ -484,6 +522,7 @@
           "type": "string"
         },
         "citizenDocumentFileUri": {
+          "format": "uri",
           "description": "The location of the Citizen Document",
           "type": "string"
         }
@@ -517,14 +556,6 @@
         }
       }
     },
-    "CitizenDocumentType": {
-      "enum": [
-        "citizenDocument",
-        "digitalPostCoverLetter",
-        "snailMailCoverLetter"
-      ],
-      "type": "string"
-    },
     "CitizenDocumentUploadResponse": {
       "type": "object",
       "properties": {
@@ -533,9 +564,15 @@
           "type": "string"
         },
         "documentType": {
-          "$ref": "#/definitions/CitizenDocumentType"
+          "type": "string",
+          "enum": [
+            "CitizenDocument",
+            "DigitalPostCoverLetter",
+            "SnailMailCoverLetter"
+          ]
         },
         "fileAccessPageUrl": {
+          "format": "uri",
           "type": "string"
         }
       }
@@ -658,6 +695,5 @@
       "type": "apiKey",
       "description": "Standard Authorization header using the Bearer scheme. <b>Example: \"bearer {token}\".</b> You can obtain that value from your browser Developer tools"
     }
-  },
-  "tags": []
+  }
 }

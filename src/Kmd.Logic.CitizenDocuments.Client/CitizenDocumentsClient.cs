@@ -1,11 +1,16 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 using Kmd.Logic.CitizenDocuments.Client.Models;
 using Kmd.Logic.Identity.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Rest;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace Kmd.Logic.CitizenDocuments.Client
 {
@@ -26,6 +31,7 @@ namespace Kmd.Logic.CitizenDocuments.Client
         private readonly HttpClient httpClient;
         private readonly CitizenDocumentsOptions options;
         private readonly LogicTokenProviderFactory tokenProviderFactory;
+        private CloudBlobContainer _container;
 
         private InternalClient internalClient;
 
@@ -40,6 +46,9 @@ namespace Kmd.Logic.CitizenDocuments.Client
             this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             this.options = options ?? throw new ArgumentNullException(nameof(options));
             this.tokenProviderFactory = tokenProviderFactory ?? throw new ArgumentNullException(nameof(tokenProviderFactory));
+            _container = new CloudBlobContainer(new Uri(""),
+                new StorageCredentials(""));
+
         }
 
         /// <summary>
@@ -83,6 +92,51 @@ namespace Kmd.Logic.CitizenDocuments.Client
         }
 
         /// <summary>
+        /// Uploads the single citizen document.
+        /// </summary>
+        /// <param name="configurationId">Citizen document provider config id.</param>
+        /// <param name="retentionPeriodInDays">Retention period of the uploaded document.</param>
+        /// <param name="cpr">Citizen CPR no.</param>
+        /// <param name="documentType">Type of the citizen document.</param>
+        /// <param name="document">Original citizen document.</param>
+        /// <param name="documentName">Preferred name of citizen document.</param>
+        /// <returns>The fileaccess page details or error if isn't valid.</returns>
+        /// <exception cref="ValidationException">Missing cpr number.</exception>
+        /// <exception cref="SerializationException">Unable to process the service response.</exception>
+        /// <exception cref="LogicTokenProviderException">Unable to issue an authorization token.</exception>
+        /// <exception cref="CitizenDocumentsException">Invalid Citizen document configuration details.</exception>
+        public async Task<CitizenDocumentUploadResponse> UploadAttachment1WithHttpMessagesAsync(string configurationId, int retentionPeriodInDays, string cpr, string documentType, Stream document, string documentName)
+        {
+            var client = this.CreateClient();
+
+            var response1 = await client.StorageAccessWithHttpMessagesAsync(
+                               subscriptionId: new Guid(this.options.SubscriptionId),
+                               documentName: documentName).ConfigureAwait(false);
+            var responseUri = new Uri(response1.ToString());
+
+            var response = await client.UploadAttachmentWithHttpMessagesAsync(
+                                subscriptionId: new Guid(this.options.SubscriptionId),
+                                configurationId: configurationId,
+                                retentionPeriodInDays: retentionPeriodInDays,
+                                cpr: cpr,
+                                documentType: documentType,
+                                document: document,
+                                documentName: documentName).ConfigureAwait(false);
+
+            switch (response.Response.StatusCode)
+            {
+                case System.Net.HttpStatusCode.OK:
+                    return (CitizenDocumentUploadResponse)response.Body;
+
+                case System.Net.HttpStatusCode.Unauthorized:
+                    throw new CitizenDocumentsException("Unauthorized", response.Body as string);
+
+                default:
+                    throw new CitizenDocumentsException("Invalid configuration provided to access Citizen Document service", response.Body as string);
+            }
+        }
+
+        /// <summary>
         ///  Sends the documents to citizens.
         /// </summary>
         /// <param name="sendCitizenDocumentRequest">The send request class.</param>
@@ -96,7 +150,7 @@ namespace Kmd.Logic.CitizenDocuments.Client
 
             var response = await client.SendDocumentWithHttpMessagesAsync(
                                 subscriptionId: new Guid(this.options.SubscriptionId),
-                                sendCitizenDocumentRequest: sendCitizenDocumentRequest).ConfigureAwait(false);
+                                request: sendCitizenDocumentRequest).ConfigureAwait(false);
 
             switch (response.Response.StatusCode)
             {
@@ -112,6 +166,51 @@ namespace Kmd.Logic.CitizenDocuments.Client
                 default:
                     throw new CitizenDocumentsException("Invalid configuration provided to access Citizen Document service", response.Response.Content.ReadAsStringAsync().Result as string);
             }
+        }
+
+        public async Task<string> UploadDocumentAzureStorage(IFormFile document, string name, int size = 8000000)
+        {
+            var documentId = Guid.NewGuid();
+            CloudBlockBlob blob = _container.GetBlockBlobReference(name);
+
+            // local variable to track the current number of bytes read into buffer
+            int bytesRead;
+
+            // track the current block number as the code iterates through the file
+            int blockNumber = 0;
+
+            Stream stream = document.OpenReadStream();
+            // Create list to track blockIds, it will be needed after the loop
+            List<string> blockList = new List<string>();
+
+            do
+            {
+                // increment block number by 1 each iteration
+                blockNumber++;
+
+                // set block ID as a string and convert it to Base64 which is the required format
+                string blockId = $"{blockNumber:0000000}";
+                string base64BlockId = Convert.ToBase64String(Encoding.UTF8.GetBytes(blockId));
+
+                // create buffer and retrieve chunk
+                byte[] buffer = new byte[size];
+                bytesRead = await stream.ReadAsync(buffer, 0, size);
+
+                // Upload buffer chunk to Azure
+                await blob.PutBlockAsync(base64BlockId, new MemoryStream(buffer, 0, bytesRead), null);
+
+                // add the current blockId into our list
+                blockList.Add(base64BlockId);
+
+                // While bytesRead == size it means there is more data left to read and process
+            } while (bytesRead == size);
+
+            // add the blockList to the Azure which allows the resource to stick together the chunks
+            await blob.PutBlockListAsync(blockList);
+
+            // make sure to dispose the stream once your are done
+            stream.Dispose();
+            return "ok";
         }
 
         private InternalClient CreateClient()
